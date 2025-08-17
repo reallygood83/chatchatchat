@@ -112,15 +112,46 @@ export default function StatelessChatSection({
     scrollToBottom();
   }, [messages]);
 
-  // Load available models on component mount
+  // Load available models on component mount and when API keys change
   useEffect(() => {
     loadAvailableModels();
+    
+    // Listen for storage changes (when keys are updated in settings)
+    const handleStorageChange = () => {
+      console.log('Storage changed, reloading models...');
+      loadAvailableModels();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', loadAvailableModels); // Reload when returning to tab
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', loadAvailableModels);
+    };
   }, []);
 
   const loadAvailableModels = async () => {
     try {
       setIsLoadingModels(true);
       const apiKeys = getStoredApiKeys();
+      
+      // Check if any API keys are available
+      if (!apiKeys.openai && !apiKeys.gemini) {
+        console.log('No API keys configured, using fallback models');
+        setAvailableModels([
+          {
+            id: 'gpt-4o-mini',
+            name: 'GPT-4o Mini (API 키 필요)',
+            provider: 'openai',
+            tier: 'standard',
+            input_cost_per_1k: 0.000150,
+            output_cost_per_1k: 0.000600,
+            context_window: 128000
+          }
+        ]);
+        return;
+      }
       
       const response = await fetch(`${config.apiBaseUrl}/models`, {
         method: 'GET',
@@ -136,15 +167,22 @@ export default function StatelessChatSection({
       }
 
       const data = await response.json();
-      if (data.models && Array.isArray(data.models)) {
+      
+      // Handle case where API returns error with 200 status
+      if (data.error) {
+        console.warn('Models API returned error:', data.error);
+        throw new Error(data.error);
+      }
+      
+      if (data.models && Array.isArray(data.models) && data.models.length > 0) {
         setAvailableModels(data.models);
         
         // Set default model based on available models
-        if (data.models.length > 0) {
-          // Prefer gpt-4o-mini if available, otherwise use first model
-          const defaultModel = data.models.find((m: AvailableModel) => m.id === 'gpt-4o-mini') || data.models[0];
-          setSelectedModel(defaultModel.id);
-        }
+        const defaultModel = data.models.find((m: AvailableModel) => m.id === 'gpt-4o-mini') || data.models[0];
+        setSelectedModel(defaultModel.id);
+        console.log(`Loaded ${data.models.length} models, selected: ${defaultModel.name}`);
+      } else {
+        throw new Error('No models available');
       }
     } catch (error) {
       console.error('Error loading models:', error);
@@ -152,7 +190,7 @@ export default function StatelessChatSection({
       setAvailableModels([
         {
           id: 'gpt-4o-mini',
-          name: 'GPT-4o Mini',
+          name: 'GPT-4o Mini (설정 필요)',
           provider: 'openai',
           tier: 'standard',
           input_cost_per_1k: 0.000150,
@@ -780,6 +818,13 @@ export default function StatelessChatSection({
         )}
       </div>
 
+      {/* Debug Info - 일시적으로 디버깅용 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-yellow-50 border border-yellow-200 p-2 m-4 text-xs">
+          <strong>Debug:</strong> 문서 {documents.length}개 | 메시지 {messages.length}개 | 모델 {availableModels.length}개
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {documents.length === 0 ? (
@@ -805,7 +850,7 @@ export default function StatelessChatSection({
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
-            <p>업로드된 문서에 대해 무엇이든 물어보세요!</p>
+            <p className="font-medium text-green-600">✅ 문서가 업로드되었습니다! 이제 질문해보세요.</p>
             <p className="text-sm mt-2">예시:</p>
             <ul className="text-sm mt-1 space-y-1">
               <li>• "다루어지는 주요 주제는 무엇인가요?"</li>
@@ -953,7 +998,7 @@ export default function StatelessChatSection({
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isLoading || isLoadingModels || availableModels.length === 0}
+              disabled={isLoading || isLoadingModels}
               className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white pr-10"
             >
               {isLoadingModels ? (
