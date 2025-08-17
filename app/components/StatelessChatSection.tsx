@@ -77,7 +77,9 @@ export default function StatelessChatSection({
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showDocuments, setShowDocuments] = useState(true);
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -605,258 +607,352 @@ export default function StatelessChatSection({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg flex flex-col h-full">
-      {/* Header */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="flex justify-between items-center mb-3">
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-gray-800">문서와 대화하기</h2>
-            <div className="flex items-center space-x-2 mt-1">
-              <p className="text-sm text-gray-600">
-                {documents.length}개 문서 {documents.length > 0 ? '•' : ''}
-              </p>
-              {isEditingDescription ? (
-                <div className="flex items-center space-x-2 flex-1">
-                  <input
-                    type="text"
-                    value={editedDescription}
-                    onChange={(e) => setEditedDescription(e.target.value)}
-                    className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1 flex-1"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveDescription();
-                      } else if (e.key === 'Escape') {
-                        handleCancelEdit();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveDescription}
-                    className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                  >
-                    저장
-                  </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
-                  >
-                    취소
-                  </button>
-                </div>
-                              ) : documents.length > 0 ? (
-                  <div className="flex items-center space-x-2">
-                    <p className="text-sm text-gray-600">{description}</p>
-                    <button
-                      onClick={handleEditDescription}
-                      className="text-xs text-blue-600 hover:text-blue-800"
-                      title="설명 편집"
-                    >
-                      문서 사용 가이드 업데이트 ✏️ 
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">시작하려면 첫 번째 PDF 문서를 업로드하세요</p>
-                )}
-            </div>
-          </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setShowUploadSection(!showUploadSection)}
-              className={documents.length === 0 
-                ? "bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium"
-                : "text-gray-500 hover:text-gray-700 px-3 py-1 rounded border border-gray-300 hover:border-gray-400 text-sm"
-              }
-            >
-              {documents.length === 0 ? "첫 번째 문서 추가" : "파일 추가"}
-            </button>
-            <button
-              onClick={onReset}
-              className="text-gray-500 hover:text-gray-700 px-3 py-1 rounded border border-gray-300 hover:border-gray-400"
-            >
-              새 세션 시작
-            </button>
-          </div>
-        </div>
-
-        {/* Upload Section */}
-        {showUploadSection && (
-          <div className="bg-gray-50 rounded-lg p-4 mb-3">
-            <h3 className="text-lg font-medium text-gray-800 mb-3">새 문서 추가</h3>
-            
-            <div className="mb-4">
-              <div 
-                className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors cursor-pointer"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <div className="text-gray-600">
-                  <svg className="mx-auto h-8 w-8 text-gray-400 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <p className="text-sm">PDF 파일을 선택하려면 클릭하거나 드래그 앤 드롭하세요</p>
-                </div>
-              </div>
-            </div>
-
-            {selectedNewFiles.length > 0 && (
+    <div className={`bg-white rounded-lg shadow-lg flex h-full ${isFullscreen ? 'fixed inset-0 z-50 rounded-none' : 'flex-col'}`}>
+      {/* Sidebar for Documents and Settings */}
+      <div className={`${showSidebar ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden border-r border-gray-200 bg-gray-50 flex-shrink-0`}>
+        {showSidebar && (
+          <div className="p-4 h-full overflow-y-auto">
+            {/* Document Management */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">문서 관리</h3>
+              
+              {/* Upload Section */}
               <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">
-                  선택된 파일 ({selectedNewFiles.length}개)
-                </h4>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {selectedNewFiles.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
-                      <span className="text-sm text-gray-700 truncate">{file.name}</span>
-                      <button
-                        onClick={() => removeNewFile(index)}
-                        className="text-red-500 hover:text-red-700 flex-shrink-0 ml-2"
+                <button
+                  onClick={() => setShowUploadSection(!showUploadSection)}
+                  className="w-full bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium mb-3"
+                >
+                  {documents.length === 0 ? "첫 번째 문서 추가" : "파일 추가"}
+                </button>
+                
+                {showUploadSection && (
+                  <div className="bg-white rounded-lg p-4 border">
+                    <h4 className="text-md font-medium text-gray-800 mb-3">새 문서 추가</h4>
+                    
+                    <div className="mb-4">
+                      <div 
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-gray-400 transition-colors cursor-pointer"
+                        onClick={() => fileInputRef.current?.click()}
                       >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                        <div className="text-gray-600">
+                          <svg className="mx-auto h-6 w-6 text-gray-400 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <p className="text-xs">PDF 파일 선택</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {selectedNewFiles.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">
+                          선택된 파일 ({selectedNewFiles.length}개)
+                        </h5>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {selectedNewFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded border">
+                              <span className="text-xs text-gray-700 truncate">{file.name}</span>
+                              <button
+                                onClick={() => removeNewFile(index)}
+                                className="text-red-500 hover:text-red-700 flex-shrink-0 ml-2"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {uploadError && (
+                      <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-red-600 text-xs">{uploadError}</p>
+                      </div>
+                    )}
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleUploadNewFiles}
+                        disabled={isUploadingFiles || selectedNewFiles.length === 0}
+                        className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-xs flex-1"
+                      >
+                        {isUploadingFiles ? '업로드 중...' : '업로드'}
+                      </button>
+                      <button
+                        onClick={handleCancelUpload}
+                        className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 text-xs"
+                      >
+                        취소
                       </button>
                     </div>
-                  ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Document List */}
+              {documents.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-gray-700">업로드된 문서 ({documents.length}개)</h4>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {documents.map((doc, index) => (
+                      <div key={index} className="bg-white p-3 rounded border border-gray-200">
+                        <div className="flex items-start space-x-2">
+                          <FileText className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-700 truncate" title={doc.filename}>
+                              {doc.filename}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              ID {doc.id} • {doc.total_pages}페이지
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="문서 삭제"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              )}
+            </div>
+            
+            {/* Model Selection */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">AI 모델</h3>
+              <div className="space-y-3">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={isLoading || isLoadingModels}
+                  className="w-full px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {isLoadingModels ? (
+                    <option value="">모델 로딩 중...</option>
+                  ) : availableModels.length === 0 ? (
+                    <option value="">API 키를 설정해주세요</option>
+                  ) : (
+                    availableModels.map((model) => {
+                      const providerIcon = model.provider === 'openai' ? '🤖' : '🧠';
+                      return (
+                        <option key={model.id} value={model.id}>
+                          {providerIcon} {model.name}
+                        </option>
+                      );
+                    })
+                  )}
+                </select>
+                
+                {selectedModel && availableModels.length > 0 && (
+                  <div className="p-2 bg-white rounded border text-xs text-gray-600 space-y-1">
+                    {(() => {
+                      const model = availableModels.find(m => m.id === selectedModel);
+                      if (!model) return null;
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span>제공사:</span>
+                            <span>{model.provider === 'openai' ? 'OpenAI' : 'Google'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>비용:</span>
+                            <span>${(model.input_cost_per_1k * 1000).toFixed(2)}/1M</span>
+                          </div>
+                        </>
+                      );
+                    })()} 
+                  </div>
+                )}
               </div>
-            )}
-
-            {uploadError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-600 text-sm">{uploadError}</p>
+            </div>
+            
+            {/* Session Info */}
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">세션 정보</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">총 비용:</span>
+                  <span className="font-medium text-green-600">${totalSessionCost.toFixed(4)}</span>
+                </div>
+                <button
+                  onClick={onReset}
+                  className="w-full text-gray-500 hover:text-gray-700 px-3 py-2 rounded border border-gray-300 hover:border-gray-400 text-sm"
+                >
+                  새 세션 시작
+                </button>
               </div>
-            )}
-
-            <div className="flex space-x-2">
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Compact Header */}
+        <div className="border-b border-gray-200 p-3 flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
               <button
-                onClick={handleUploadNewFiles}
-                disabled={isUploadingFiles || selectedNewFiles.length === 0}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-md hover:bg-gray-100"
+                title="문서 및 설정 패널"
               >
-                {isUploadingFiles ? '업로드 중...' : `${selectedNewFiles.length}개 파일 업로드`}
+                <Settings className="w-5 h-5" />
+              </button>
+              
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">티보드 chat</h2>
+                {documents.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">{documents.length}개 문서</span>
+                    {description && (
+                      <>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-sm text-gray-600">{description}</span>
+                        <button
+                          onClick={handleEditDescription}
+                          className="text-xs text-blue-600 hover:text-blue-800 ml-1"
+                          title="설명 편집"
+                        >
+                          ✏️
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {documents.length === 0 && (
+                <button
+                  onClick={() => {
+                    setShowSidebar(true);
+                    setShowUploadSection(true);
+                  }}
+                  className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium"
+                >
+                  첫 번째 문서 추가
+                </button>
+              )}
+              
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-md hover:bg-gray-100"
+                title={isFullscreen ? "전체화면 종료" : "전체화면"}
+              >
+                {isFullscreen ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+          
+          {/* Edit Description Inline */}
+          {isEditingDescription && (
+            <div className="mt-3 flex items-center space-x-2">
+              <input
+                type="text"
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                className="flex-1 text-sm border border-gray-300 rounded px-3 py-2"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveDescription();
+                  } else if (e.key === 'Escape') {
+                    handleCancelEdit();
+                  }
+                }}
+                placeholder="문서 사용 가이드 설명"
+                autoFocus
+              />
+              <button
+                onClick={handleSaveDescription}
+                className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
+              >
+                저장
               </button>
               <button
-                onClick={handleCancelUpload}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm"
+                onClick={handleCancelEdit}
+                className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 text-sm"
               >
                 취소
               </button>
             </div>
-          </div>
-        )}
-        
-        {/* Document List */}
-        {documents.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <button
-                onClick={() => setShowDocuments(!showDocuments)}
-                className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-              >
-                <span>업로드된 문서</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showDocuments ? 'rotate-90' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <div className="flex items-center space-x-3">
-                <span className="text-xs text-gray-500">{documents.length}개 파일</span>
-                <span className="text-xs font-medium text-green-600">
-                  비용: ${totalSessionCost.toFixed(4)}
-                </span>
-              </div>
-            </div>
-            {showDocuments && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {documents.map((doc, index) => (
-                <div
-                  key={index}
-                  className="flex items-center space-x-2 bg-white p-2 rounded border border-gray-200"
-                >
-                  <div className="flex-shrink-0">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-700 truncate" title={doc.filename}>
-                      ID {doc.id}: {doc.filename}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {doc.total_pages}페이지
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteDocument(doc.id);
-                    }}
-                    className="flex-shrink-0 ml-2 text-red-500 hover:text-red-700 p-1"
-                    title="문서 삭제"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Debug Info - 일시적으로 디버깅용 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-yellow-50 border border-yellow-200 p-2 m-4 text-xs">
-          <strong>Debug:</strong> 문서 {documents.length}개 | 메시지 {messages.length}개 | 모델 {availableModels.length}개
+          )}
         </div>
-      )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Messages Area - Maximum space for reading */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-gray-50 to-white">
         {documents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md">
-              <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">업로드된 문서가 없습니다</h3>
-              <p className="text-gray-500 mb-4">
-                내용에 대해 채팅을 시작하려면 PDF 문서를 업로드하세요. 시작하려면 위의 "파일 추가"를 클릭하세요.
+            <div className="text-center max-w-lg p-8">
+              <div className="bg-blue-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+                <FileText className="w-12 h-12 text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">티보드 chat에 오신 것을 환영합니다!</h3>
+              <p className="text-gray-600 mb-6 leading-relaxed">
+                교육 자료와 대화를 시작하려면 PDF 문서를 업로드해주세요.<br/>
+                교과서, 참고서, 논문, 보고서 등 모든 PDF 자료를 업로드할 수 있습니다.
               </p>
               <button
-                onClick={() => setShowUploadSection(true)}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onClick={() => {
+                  setShowSidebar(true);
+                  setShowUploadSection(true);
+                }}
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white text-lg font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg transition-all duration-200 hover:shadow-xl"
               >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
-                첫 번째 문서 추가
+                <Plus className="w-6 h-6 mr-2" />
+                첫 번째 문서 추가하기
               </button>
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            <p className="font-medium text-green-600">✅ 문서가 업로드되었습니다! 이제 질문해보세요.</p>
-            <p className="text-sm mt-2">예시:</p>
-            <ul className="text-sm mt-1 space-y-1">
-              <li>• "다루어지는 주요 주제는 무엇인가요?"</li>
-              <li>• "핵심 발견사항을 요약해주세요"</li>
-              <li>• "[특정 주제]에 대해 어떻게 설명하고 있나요?"</li>
-            </ul>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-2xl p-8">
+              <div className="bg-green-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-green-700 mb-4">문서 업로드 완료! 이제 질문해보세요.</h3>
+              
+              <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <h4 className="font-semibold text-gray-800 mb-3">추천 질문 예시:</h4>
+                <div className="space-y-2 text-left">
+                  <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                    <p className="text-sm font-medium text-blue-800">"이 문서의 핵심 내용을 3가지로 요약해주세요"</p>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-400">
+                    <p className="text-sm font-medium text-green-800">"[특정 주제]에 대해 어떻게 설명하고 있나요?"</p>
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg border-l-4 border-purple-400">
+                    <p className="text-sm font-medium text-purple-800">"이 내용으로 만들 수 있는 문제 5개를 추천해주세요"</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mt-4">
+                  팁: 페이지 번호나 단원을 명시하면 더 정확한 답변을 받을 수 있습니다!
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -868,10 +964,10 @@ export default function StatelessChatSection({
             }`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
+              className={`max-w-[85%] p-4 rounded-xl shadow-sm ${
                 message.role === 'user'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-900'
+                  : 'bg-white text-gray-900 border border-gray-200'
               }`}
             >
               {/* Progress indicator for streaming messages */}
@@ -900,7 +996,7 @@ export default function StatelessChatSection({
                 </div>
               )}
 
-              <div className="prose prose-sm max-w-none">
+              <div className="prose prose-lg max-w-none">
                 <ReactMarkdown
                   components={{
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -984,92 +1080,51 @@ export default function StatelessChatSection({
           </div>
         ))}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="border-t border-gray-200 p-4">
-        {/* Model Selection */}
-        <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            AI 모델 선택:
-          </label>
-          <div className="relative">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isLoading || isLoadingModels}
-              className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white pr-10"
-            >
-              {isLoadingModels ? (
-                <option value="">모델 로딩 중...</option>
-              ) : availableModels.length === 0 ? (
-                <option value="">API 키를 설정해주세요</option>
-              ) : (
-                availableModels.map((model) => {
-                  const providerIcon = model.provider === 'openai' ? '🤖' : '🧠';
-                  const tierBadge = model.tier === 'premium' ? '⭐' : model.tier === 'standard' ? '🔸' : '💰';
-                  return (
-                    <option key={model.id} value={model.id}>
-                      {providerIcon} {model.name} {tierBadge} ({model.provider === 'openai' ? 'OpenAI' : 'Google'}) - ${(model.input_cost_per_1k * 1000).toFixed(2)}/1M 토큰
-                    </option>
-                  );
-                })
-              )}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          </div>
-          {selectedModel && availableModels.length > 0 && (
-            <div className="mt-2 p-2 bg-gray-50 rounded-md">
-              {(() => {
-                const model = availableModels.find(m => m.id === selectedModel);
-                if (!model) return null;
-                return (
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div className="flex justify-between">
-                      <span>제공사:</span>
-                      <span className="font-medium">{model.provider === 'openai' ? 'OpenAI' : 'Google'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>등급:</span>
-                      <span className="font-medium">{model.tier === 'premium' ? '프리미엄' : model.tier === 'standard' ? '표준' : '기본'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>입력 비용:</span>
-                      <span className="font-medium">${(model.input_cost_per_1k * 1000).toFixed(2)}/1M 토큰</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>출력 비용:</span>
-                      <span className="font-medium">${(model.output_cost_per_1k * 1000).toFixed(2)}/1M 토큰</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>컨텍스트:</span>
-                      <span className="font-medium">{(model.context_window / 1000).toFixed(0)}K 토큰</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+          <div ref={messagesEndRef} />
         </div>
-        
-        <div className="flex space-x-2">
-          <textarea
-            value={currentQuestion}
-            onChange={(e) => setCurrentQuestion(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={documents.length === 0 ? "문서를 먼저 업로드하여 채팅을 시작하세요..." : "업로드된 문서에 대해 질문해보세요..."}
-            className="flex-1 px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            rows={2}
-            disabled={isLoading || documents.length === 0}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!currentQuestion.trim() || isLoading || documents.length === 0}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            전송
-          </button>
+
+        {/* Enhanced Input Area */}
+        <div className="border-t border-gray-200 bg-white p-4 flex-shrink-0">
+          <div className="flex space-x-3">
+            <div className="flex-1">
+              <textarea
+                value={currentQuestion}
+                onChange={(e) => setCurrentQuestion(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={documents.length === 0 ? "문서를 먼저 업로드하여 채팅을 시작하세요..." : "업로드된 문서에 대해 질문해보세요... (예: '주요 내용을 요약해주세요', '특정 개념에 대해 설명해주세요')"}
+                className="w-full px-4 py-3 text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-base leading-relaxed"
+                rows={3}
+                disabled={isLoading || documents.length === 0}
+              />
+              {currentQuestion.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500">
+                  {currentQuestion.length} 글자 | Shift+Enter로 줄바꿈, Enter로 전송
+                </div>
+              )}
+            </div>
+            
+            <div className="flex flex-col space-y-2">
+              <button
+                onClick={handleSendMessage}
+                disabled={!currentQuestion.trim() || isLoading || documents.length === 0}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-base transition-colors duration-200 flex items-center justify-center min-w-[80px]"
+              >
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
+              
+              {documents.length > 0 && (
+                <div className="text-xs text-gray-500 text-center">
+                  {availableModels.find(m => m.id === selectedModel)?.provider === 'openai' ? '🤖' : '🧠'}
+                  <br/>
+                  {availableModels.find(m => m.id === selectedModel)?.name.split(' ').slice(0, 2).join(' ')}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1118,4 +1173,4 @@ export default function StatelessChatSection({
       )}
     </div>
   );
-} 
+}

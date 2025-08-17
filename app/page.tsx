@@ -123,9 +123,9 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8 relative">
+    <main className="h-screen bg-gray-50 overflow-hidden">
+      <div className="container mx-auto px-4 py-4 h-full flex flex-col">
+        <div className="text-center mb-4 relative flex-shrink-0">
           {/* Settings Button */}
           <button
             onClick={() => router.push('/settings')}
@@ -407,7 +407,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="max-w-6xl mx-auto h-[80vh]">
+        <div className="w-full h-[calc(100vh-2rem)] max-w-7xl mx-auto">
           <StatelessChatSection
             documents={documents}
             description={description}
