@@ -1003,9 +1003,9 @@ export default function StatelessChatSection({
                     </div>
                   </div>
                 );
-              })()
-            )}
-          </div>
+              })()}
+            </div>
+          )}
         </div>
         
         <div className="flex space-x-2">
