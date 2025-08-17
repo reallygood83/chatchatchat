@@ -942,13 +942,16 @@ export default function StatelessChatSection({
               <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
                 <h4 className="font-semibold text-gray-800 mb-3">추천 질문 예시:</h4>
                 <div className="space-y-2 text-left">
-                  <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                  <div className="p-3 bg-blue-50 rounded-lg flex items-start">
+                    <span className="text-blue-500 mr-3 text-lg">💡</span>
                     <p className="text-sm font-medium text-blue-800">"이 문서의 핵심 내용을 3가지로 요약해주세요"</p>
                   </div>
-                  <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-400">
+                  <div className="p-3 bg-green-50 rounded-lg flex items-start">
+                    <span className="text-green-500 mr-3 text-lg">🔍</span>
                     <p className="text-sm font-medium text-green-800">"[특정 주제]에 대해 어떻게 설명하고 있나요?"</p>
                   </div>
-                  <div className="p-3 bg-purple-50 rounded-lg border-l-4 border-purple-400">
+                  <div className="p-3 bg-purple-50 rounded-lg flex items-start">
+                    <span className="text-purple-500 mr-3 text-lg">📝</span>
                     <p className="text-sm font-medium text-purple-800">"이 내용으로 만들 수 있는 문제 5개를 추천해주세요"</p>
                   </div>
                 </div>
