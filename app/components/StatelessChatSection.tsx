@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Upload, X, FileText, Eye, EyeOff, Settings, Plus, Trash2, Edit2, Check, RotateCcw, ChevronDown } from 'lucide-react';
+import { Send, Upload, X, FileText, Eye, EyeOff, Settings, Plus, Trash2, Edit2, Check, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import config from '../../config';
 import ChunkedUploader from '../utils/chunkedUpload';
 import { getStoredApiKeys } from '../utils/apiKeys';
@@ -78,7 +78,7 @@ export default function StatelessChatSection({
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
@@ -87,7 +87,7 @@ export default function StatelessChatSection({
   const [editedDescription, setEditedDescription] = useState('');
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [selectedNewFiles, setSelectedNewFiles] = useState<File[]>([]);
-  const [showUploadSection, setShowUploadSection] = useState(false);
+  const [showUploadSection, setShowUploadSection] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [uploadProgress, setUploadProgress] = useState<{
     percentComplete: number;
@@ -807,9 +807,13 @@ export default function StatelessChatSection({
               <button
                 onClick={() => setShowSidebar(!showSidebar)}
                 className="p-2 text-gray-500 hover:text-gray-700 rounded-md hover:bg-gray-100"
-                title="문서 및 설정 패널"
+                title={showSidebar ? "사이드바 닫기" : "사이드바 열기"}
               >
-                <Settings className="w-5 h-5" />
+                {showSidebar ? (
+                  <PanelLeftClose className="w-5 h-5" />
+                ) : (
+                  <PanelLeftOpen className="w-5 h-5" />
+                )}
               </button>
               
               <div>
@@ -1091,10 +1095,10 @@ export default function StatelessChatSection({
                 value={currentQuestion}
                 onChange={(e) => setCurrentQuestion(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={documents.length === 0 ? "문서를 먼저 업로드하여 채팅을 시작하세요..." : "업로드된 문서에 대해 질문해보세요... (예: '주요 내용을 요약해주세요', '특정 개념에 대해 설명해주세요')"}
+                placeholder={documents.length === 0 ? "문서를 업로드하고 질문해보세요..." : "업로드된 문서에 대해 질문해보세요... (예: '주요 내용을 요약해주세요', '특정 개념에 대해 설명해주세요')"}
                 className="w-full px-4 py-3 text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-base leading-relaxed"
                 rows={3}
-                disabled={isLoading || documents.length === 0}
+                disabled={isLoading}
               />
               {currentQuestion.length > 0 && (
                 <div className="mt-2 text-xs text-gray-500">
@@ -1106,7 +1110,7 @@ export default function StatelessChatSection({
             <div className="flex flex-col space-y-2">
               <button
                 onClick={handleSendMessage}
-                disabled={!currentQuestion.trim() || isLoading || documents.length === 0}
+                disabled={!currentQuestion.trim() || isLoading}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-base transition-colors duration-200 flex items-center justify-center min-w-[80px]"
               >
                 {isLoading ? (
