@@ -2,9 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Upload, X, FileText, Eye, EyeOff, Settings, Plus, Trash2, Edit2, Check, RotateCcw } from 'lucide-react';
+import { Send, Upload, X, FileText, Eye, EyeOff, Settings, Plus, Trash2, Edit2, Check, RotateCcw, ChevronDown } from 'lucide-react';
 import config from '../../config';
 import ChunkedUploader from '../utils/chunkedUpload';
+import { getStoredApiKeys } from '../utils/apiKeys';
 
 interface Message {
   id: string;
@@ -48,6 +49,16 @@ interface DocumentData {
   total_pages: number;
 }
 
+interface AvailableModel {
+  id: string;
+  name: string;
+  provider: string;
+  tier: string;
+  input_cost_per_1k: number;
+  output_cost_per_1k: number;
+  context_window: number;
+}
+
 interface StatelessChatSectionProps {
   documents: DocumentData[];
   description: string;
@@ -67,7 +78,9 @@ export default function StatelessChatSection({
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showDocuments, setShowDocuments] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-5-mini');
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -98,6 +111,59 @@ export default function StatelessChatSection({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load available models on component mount
+  useEffect(() => {
+    loadAvailableModels();
+  }, []);
+
+  const loadAvailableModels = async () => {
+    try {
+      setIsLoadingModels(true);
+      const apiKeys = getStoredApiKeys();
+      
+      const response = await fetch(`${config.apiBaseUrl}/models`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKeys.openai && { 'X-OpenAI-Key': apiKeys.openai }),
+          ...(apiKeys.gemini && { 'X-Gemini-Key': apiKeys.gemini }),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load models');
+      }
+
+      const data = await response.json();
+      if (data.models && Array.isArray(data.models)) {
+        setAvailableModels(data.models);
+        
+        // Set default model based on available models
+        if (data.models.length > 0) {
+          // Prefer gpt-4o-mini if available, otherwise use first model
+          const defaultModel = data.models.find((m: AvailableModel) => m.id === 'gpt-4o-mini') || data.models[0];
+          setSelectedModel(defaultModel.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading models:', error);
+      // Fallback to basic models if API fails
+      setAvailableModels([
+        {
+          id: 'gpt-4o-mini',
+          name: 'GPT-4o Mini',
+          provider: 'openai',
+          tier: 'standard',
+          input_cost_per_1k: 0.000150,
+          output_cost_per_1k: 0.000600,
+          context_window: 128000
+        }
+      ]);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!currentQuestion.trim() || isLoading) return;
@@ -136,10 +202,14 @@ export default function StatelessChatSection({
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
+      const apiKeys = getStoredApiKeys();
+      
       const response = await fetch(`${config.apiBaseUrl}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(apiKeys.openai && { 'X-OpenAI-Key': apiKeys.openai }),
+          ...(apiKeys.gemini && { 'X-Gemini-Key': apiKeys.gemini }),
         },
         body: JSON.stringify({
           question: question,
@@ -300,26 +370,26 @@ export default function StatelessChatSection({
     const files = Array.from(event.target.files || []);
     
     if (files.length > 100) {
-      setUploadError('Maximum 100 files allowed');
+      setUploadError('최대 100개 파일만 허용됩니다');
       return;
     }
 
     const invalidFiles = files.filter(file => !file.name.endsWith('.pdf'));
     if (invalidFiles.length > 0) {
-      setUploadError('Only PDF files are allowed');
+      setUploadError('PDF 파일만 허용됩니다');
       return;
     }
 
     const currentCount = documents.length;
     if (currentCount + files.length > 100) {
-      setUploadError(`Adding ${files.length} files would exceed the 100 document limit. Current: ${currentCount}`);
+      setUploadError(`${files.length}개 파일을 추가하면 100개 문서 제한을 초과합니다. 현재: ${currentCount}개`);
       return;
     }
 
     const existingFilenames = documents?.map(doc => doc?.filename).filter(Boolean) || [];
     const duplicateFiles = files.filter(file => existingFilenames.includes(file.name));
     if (duplicateFiles.length > 0) {
-      setUploadError(`Files already exist: ${duplicateFiles.map(f => f.name).join(', ')}`);
+      setUploadError(`이미 존재하는 파일: ${duplicateFiles.map(f => f.name).join(', ')}`);
       return;
     }
 
@@ -333,7 +403,7 @@ export default function StatelessChatSection({
 
   const handleUploadNewFiles = async () => {
     if (selectedNewFiles.length === 0) {
-      setUploadError('Please select at least one PDF file');
+      setUploadError('최소 하나의 PDF 파일을 선택해주세요');
       return;
     }
 
@@ -413,7 +483,7 @@ export default function StatelessChatSection({
 
   const handleDeleteDocument = (documentId: number) => {
     // Confirm deletion
-    if (confirm('Are you sure you want to delete this document?')) {
+    if (confirm('이 문서를 삭제하시겠습니까?')) {
       const updatedDocuments = documents.filter(doc => doc.id !== documentId);
       onUpdateDocuments(updatedDocuments);
       
@@ -502,10 +572,10 @@ export default function StatelessChatSection({
       <div className="border-b border-gray-200 p-4">
         <div className="flex justify-between items-center mb-3">
           <div className="flex-1">
-            <h2 className="text-xl font-semibold text-gray-800">Chat with your documents</h2>
+            <h2 className="text-xl font-semibold text-gray-800">문서와 대화하기</h2>
             <div className="flex items-center space-x-2 mt-1">
               <p className="text-sm text-gray-600">
-                {documents.length} document(s) {documents.length > 0 ? '•' : ''}
+                {documents.length}개 문서 {documents.length > 0 ? '•' : ''}
               </p>
               {isEditingDescription ? (
                 <div className="flex items-center space-x-2 flex-1">
@@ -527,13 +597,13 @@ export default function StatelessChatSection({
                     onClick={handleSaveDescription}
                     className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
                   >
-                    Save
+                    저장
                   </button>
                   <button
                     onClick={handleCancelEdit}
                     className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
                   >
-                    Cancel
+                    취소
                   </button>
                 </div>
                               ) : documents.length > 0 ? (
@@ -542,13 +612,13 @@ export default function StatelessChatSection({
                     <button
                       onClick={handleEditDescription}
                       className="text-xs text-blue-600 hover:text-blue-800"
-                      title="Edit description"
+                      title="설명 편집"
                     >
-                      Update document usage guide ✏️ 
+                      문서 사용 가이드 업데이트 ✏️ 
                     </button>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">Upload your first PDF document to get started</p>
+                  <p className="text-sm text-gray-500 italic">시작하려면 첫 번째 PDF 문서를 업로드하세요</p>
                 )}
             </div>
           </div>
@@ -560,13 +630,13 @@ export default function StatelessChatSection({
                 : "text-gray-500 hover:text-gray-700 px-3 py-1 rounded border border-gray-300 hover:border-gray-400 text-sm"
               }
             >
-              {documents.length === 0 ? "Add Your First Document" : "Add Files"}
+              {documents.length === 0 ? "첫 번째 문서 추가" : "파일 추가"}
             </button>
             <button
               onClick={onReset}
               className="text-gray-500 hover:text-gray-700 px-3 py-1 rounded border border-gray-300 hover:border-gray-400"
             >
-              Start new session
+              새 세션 시작
             </button>
           </div>
         </div>
@@ -574,7 +644,7 @@ export default function StatelessChatSection({
         {/* Upload Section */}
         {showUploadSection && (
           <div className="bg-gray-50 rounded-lg p-4 mb-3">
-            <h3 className="text-lg font-medium text-gray-800 mb-3">Add New Documents</h3>
+            <h3 className="text-lg font-medium text-gray-800 mb-3">새 문서 추가</h3>
             
             <div className="mb-4">
               <div 
@@ -593,7 +663,7 @@ export default function StatelessChatSection({
                   <svg className="mx-auto h-8 w-8 text-gray-400 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                     <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <p className="text-sm">Click to select PDF files or drag and drop</p>
+                  <p className="text-sm">PDF 파일을 선택하려면 클릭하거나 드래그 앤 드롭하세요</p>
                 </div>
               </div>
             </div>
@@ -601,7 +671,7 @@ export default function StatelessChatSection({
             {selectedNewFiles.length > 0 && (
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">
-                  Selected Files ({selectedNewFiles.length})
+                  선택된 파일 ({selectedNewFiles.length}개)
                 </h4>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {selectedNewFiles.map((file, index) => (
@@ -633,13 +703,13 @@ export default function StatelessChatSection({
                 disabled={isUploadingFiles || selectedNewFiles.length === 0}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
               >
-                {isUploadingFiles ? 'Uploading...' : `Upload ${selectedNewFiles.length} file(s)`}
+                {isUploadingFiles ? '업로드 중...' : `${selectedNewFiles.length}개 파일 업로드`}
               </button>
               <button
                 onClick={handleCancelUpload}
                 className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm"
               >
-                Cancel
+                취소
               </button>
             </div>
           </div>
@@ -653,7 +723,7 @@ export default function StatelessChatSection({
                 onClick={() => setShowDocuments(!showDocuments)}
                 className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900"
               >
-                <span>Uploaded Documents</span>
+                <span>업로드된 문서</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showDocuments ? 'rotate-90' : ''}`}
                   fill="none"
@@ -664,9 +734,9 @@ export default function StatelessChatSection({
                 </svg>
               </button>
               <div className="flex items-center space-x-3">
-                <span className="text-xs text-gray-500">{documents.length} files</span>
+                <span className="text-xs text-gray-500">{documents.length}개 파일</span>
                 <span className="text-xs font-medium text-green-600">
-                  Cost: ${totalSessionCost.toFixed(4)}
+                  비용: ${totalSessionCost.toFixed(4)}
                 </span>
               </div>
             </div>
@@ -687,7 +757,7 @@ export default function StatelessChatSection({
                       ID {doc.id}: {doc.filename}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {doc.total_pages} pages
+                      {doc.total_pages}페이지
                     </p>
                   </div>
                   <button
@@ -696,7 +766,7 @@ export default function StatelessChatSection({
                       handleDeleteDocument(doc.id);
                     }}
                     className="flex-shrink-0 ml-2 text-red-500 hover:text-red-700 p-1"
-                    title="Delete document"
+                    title="문서 삭제"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -718,9 +788,9 @@ export default function StatelessChatSection({
               <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                 <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No documents uploaded</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">업로드된 문서가 없습니다</h3>
               <p className="text-gray-500 mb-4">
-                Upload PDF documents to start chatting about their content. Click "Add Files" above to get started.
+                내용에 대해 채팅을 시작하려면 PDF 문서를 업로드하세요. 시작하려면 위의 "파일 추가"를 클릭하세요.
               </p>
               <button
                 onClick={() => setShowUploadSection(true)}
@@ -729,18 +799,18 @@ export default function StatelessChatSection({
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                 </svg>
-                Add Your First Document
+                첫 번째 문서 추가
               </button>
             </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
-            <p>Ask me anything about your uploaded documents!</p>
-            <p className="text-sm mt-2">Examples:</p>
+            <p>업로드된 문서에 대해 무엇이든 물어보세요!</p>
+            <p className="text-sm mt-2">예시:</p>
             <ul className="text-sm mt-1 space-y-1">
-              <li>• "What are the main topics covered?"</li>
-              <li>• "Summarize the key findings"</li>
-              <li>• "What does it say about [specific topic]?"</li>
+              <li>• "다루어지는 주요 주제는 무엇인가요?"</li>
+              <li>• "핵심 발견사항을 요약해주세요"</li>
+              <li>• "[특정 주제]에 대해 어떻게 설명하고 있나요?"</li>
             </ul>
           </div>
         ) : null}
@@ -843,19 +913,19 @@ export default function StatelessChatSection({
                 <div className="mt-2 text-xs opacity-60 space-y-1">
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {message.metadata.selectedDocuments && (
-                      <span><span className="font-medium">Docs:</span> {message.metadata.selectedDocuments.map(doc => `${doc.filename} (ID: ${doc.id})`).join(', ')}</span>
+                      <span><span className="font-medium">문서:</span> {message.metadata.selectedDocuments.map(doc => `${doc.filename} (ID: ${doc.id})`).join(', ')}</span>
                     )}
                     {message.metadata.relevantPagesCount && (
-                      <span><span className="font-medium">Pages:</span> {message.metadata.relevantPagesCount}</span>
+                      <span><span className="font-medium">페이지:</span> {message.metadata.relevantPagesCount}</span>
                     )}
                     {message.metadata.model && (
-                      <span><span className="font-medium">Model:</span> {message.metadata.model}</span>
+                      <span><span className="font-medium">모델:</span> {message.metadata.model}</span>
                     )}
                     {message.metadata.timing?.total_time && (
-                      <span><span className="font-medium">Time:</span> {message.metadata.timing.total_time.toFixed(1)}s</span>
+                      <span><span className="font-medium">시간:</span> {message.metadata.timing.total_time.toFixed(1)}초</span>
                     )}
                     {message.metadata.costs?.total_cost && (
-                      <span><span className="font-medium">Cost:</span> ${message.metadata.costs.total_cost.toFixed(4)}</span>
+                      <span><span className="font-medium">비용:</span> ${message.metadata.costs.total_cost.toFixed(4)}</span>
                     )}
                   </div>
                 </div>
@@ -877,33 +947,64 @@ export default function StatelessChatSection({
         {/* Model Selection */}
         <div className="mb-3">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            AI Model:
+            AI 모델 선택:
           </label>
-          <div className="flex space-x-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                name="model"
-                value="gpt-5-mini"
-                checked={selectedModel === 'gpt-5-mini'}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={isLoading}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-700">GPT-5 Mini (Faster, Lower Cost)</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                name="model"
-                value="gpt-5"
-                checked={selectedModel === 'gpt-5'}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={isLoading}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-700">GPT-5 (Higher Quality, Higher Cost)</span>
-            </label>
+          <div className="relative">
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isLoading || isLoadingModels || availableModels.length === 0}
+              className="w-full px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white pr-10"
+            >
+              {isLoadingModels ? (
+                <option value="">모델 로딩 중...</option>
+              ) : availableModels.length === 0 ? (
+                <option value="">API 키를 설정해주세요</option>
+              ) : (
+                availableModels.map((model) => {
+                  const providerIcon = model.provider === 'openai' ? '🤖' : '🧠';
+                  const tierBadge = model.tier === 'premium' ? '⭐' : model.tier === 'standard' ? '🔸' : '💰';
+                  return (
+                    <option key={model.id} value={model.id}>
+                      {providerIcon} {model.name} {tierBadge} ({model.provider === 'openai' ? 'OpenAI' : 'Google'}) - ${(model.input_cost_per_1k * 1000).toFixed(2)}/1M 토큰
+                    </option>
+                  );
+                })
+              )}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+          {selectedModel && availableModels.length > 0 && (
+            <div className="mt-2 p-2 bg-gray-50 rounded-md">
+              {(() => {
+                const model = availableModels.find(m => m.id === selectedModel);
+                if (!model) return null;
+                return (
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div className="flex justify-between">
+                      <span>제공사:</span>
+                      <span className="font-medium">{model.provider === 'openai' ? 'OpenAI' : 'Google'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>등급:</span>
+                      <span className="font-medium">{model.tier === 'premium' ? '프리미엄' : model.tier === 'standard' ? '표준' : '기본'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>입력 비용:</span>
+                      <span className="font-medium">${(model.input_cost_per_1k * 1000).toFixed(2)}/1M 토큰</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>출력 비용:</span>
+                      <span className="font-medium">${(model.output_cost_per_1k * 1000).toFixed(2)}/1M 토큰</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>컨텍스트:</span>
+                      <span className="font-medium">{(model.context_window / 1000).toFixed(0)}K 토큰</span>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
           </div>
         </div>
         
@@ -912,7 +1013,7 @@ export default function StatelessChatSection({
             value={currentQuestion}
             onChange={(e) => setCurrentQuestion(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={documents.length === 0 ? "Upload documents first to start chatting..." : "Ask a question about your documents..."}
+            placeholder={documents.length === 0 ? "문서를 먼저 업로드하여 채팅을 시작하세요..." : "업로드된 문서에 대해 질문해보세요..."}
             className="flex-1 px-3 py-2 text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             rows={2}
             disabled={isLoading || documents.length === 0}
@@ -922,7 +1023,7 @@ export default function StatelessChatSection({
             disabled={!currentQuestion.trim() || isLoading || documents.length === 0}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            Send
+            전송
           </button>
         </div>
       </div>
@@ -937,7 +1038,7 @@ export default function StatelessChatSection({
                 <h3 className="text-lg font-semibold text-gray-800">
                   {selectedPageContent.filename} - Page {selectedPageContent.pageNumber}
                 </h3>
-                <p className="text-sm text-gray-600">Extracted Text Content</p>
+                <p className="text-sm text-gray-600">추출된 텍스트 내용</p>
               </div>
               <button
                 onClick={() => setSelectedPageContent(null)}
@@ -964,7 +1065,7 @@ export default function StatelessChatSection({
                 onClick={() => setSelectedPageContent(null)}
                 className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
               >
-                Close
+                닫기
               </button>
             </div>
           </div>
